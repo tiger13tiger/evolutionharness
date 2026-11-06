@@ -183,8 +183,12 @@ class OpenAICompatAgent:
         msgs = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}]
         out, executed = AgentOutput(answer=""), False
         for _ in range(self.max_turns):
-            resp = self.client.chat.completions.create(model=self.model, messages=msgs, tools=self.tools,
-                                                       temperature=0)
+            raw = self.client.chat.completions.with_raw_response.create(
+                model=self.model, messages=msgs, tools=self.tools, temperature=0)
+            resp = raw.parse()
+            if isinstance(resp, str):                             # endpoint returned non-JSON: fail loudly
+                raise RuntimeError(f"Bad response from {self.client.base_url} "
+                                   f"[{raw.http_response.status_code} {raw.headers.get('content-type')}]: {resp[:300]}")
             if resp.usage:
                 out.input_tokens += resp.usage.prompt_tokens
                 out.output_tokens += resp.usage.completion_tokens
