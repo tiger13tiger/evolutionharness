@@ -113,12 +113,20 @@ def pct(values, q):
 PACE_S = 0.0                                                     # delay between calls (free-tier rate limits)
 
 
+TRANSIENT = ("RateLimit", "InternalServer", "APITimeout", "APIConnection", "Overloaded", "ServiceUnavailable")
+BACKOFF_S = (20, 40, 80)                                         # free tiers reset per minute
+
+
 def safe_run(agent, question):
-    """Call the agent; API failures are recorded as an error instead of aborting the whole run."""
-    try:
-        return agent.run(question), ""
-    except Exception as e:
-        return AgentOutput(answer="", refused=True), f"{type(e).__name__}: {str(e)[:150]}"
+    """Call the agent, waiting out rate limits/outages. A persistent failure is recorded, not raised."""
+    for attempt in range(len(BACKOFF_S) + 1):
+        try:
+            return agent.run(question), ""
+        except Exception as e:
+            err = f"{type(e).__name__}: {str(e)[:150]}"
+            if attempt == len(BACKOFF_S) or not any(k in type(e).__name__ for k in TRANSIENT):
+                return AgentOutput(answer="", refused=True), err
+            time.sleep(BACKOFF_S[attempt])
 
 
 def eval_golden(agent, cases, db, run_id):

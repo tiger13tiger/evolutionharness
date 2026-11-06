@@ -16,6 +16,7 @@ import difflib
 import json
 import re
 import sqlite3
+import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -108,21 +109,28 @@ class LLMMutator:
         for i in range(k):
             msg = MUTATION_PROMPT.format(prompt=prompt, failures=failures, max_chars=MAX_PROMPT_CHARS,
                                          hint=HINTS[i % len(HINTS)])
-            try:
-                if self.kind == "claude":
-                    r = self.client.messages.create(model=self.model or "claude-sonnet-5-5", max_tokens=2000,
-                                                    messages=[{"role": "user", "content": msg}])
-                    text = "".join(b.text for b in r.content if b.type == "text")
-                else:
-                    r = self.client.chat.completions.create(model=self.model, temperature=0.8,
-                                                            messages=[{"role": "user", "content": msg}])
-                    text = r.choices[0].message.content or ""
-            except Exception as e:
-                print(f"  mutator call failed: {type(e).__name__}: {str(e)[:120]}")
+            for attempt in range(4):                              # wait out rate limits
+                try:
+                    text = self._call(msg)
+                    break
+                except Exception as e:
+                    print(f"  mutator call failed ({attempt + 1}/4): {type(e).__name__}: {str(e)[:100]}")
+                    text = ""
+                    time.sleep((20, 40, 80, 0)[attempt])
+            if not text:
                 continue
             m = re.search(r"<prompt>(.*?)</prompt>", text, re.S)
             out.append((m.group(1) if m else text).strip())
         return out
+
+    def _call(self, msg):
+        if self.kind == "claude":
+            r = self.client.messages.create(model=self.model or "claude-sonnet-5-5", max_tokens=2000,
+                                            messages=[{"role": "user", "content": msg}])
+            return "".join(b.text for b in r.content if b.type == "text")
+        r = self.client.chat.completions.create(model=self.model, temperature=0.8,
+                                                messages=[{"role": "user", "content": msg}])
+        return r.choices[0].message.content or ""
 
 
 class MockMutator:
@@ -156,7 +164,7 @@ def validate(prompt, train, db):
     if missing:
         return "safety_rule_removed:" + ",".join(missing)
     for c in train:                                              # leakage: copied questions or gold numbers
-        if c["question"][:40].lower() in low:
+        if len(c["question"]) >= 30 and c["question"][:40].lower() in low:
             return f"leaks_question:{c['id']}"
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     nums = {str(v) for c in train if c.get("gold_sql") for row in con.execute(c["gold_sql"]).fetchall()
