@@ -226,7 +226,7 @@ def write_report(s, g_rows, s_rows, fails, agent_name, out_dir: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--agent", choices=["mock", "claude", *PROVIDERS], default="mock")
-    ap.add_argument("--model", default=None, help="e.g. openai/gpt-4.1-mini (github), claude-sonnet-5-5")
+    ap.add_argument("--model", default=None, help="override provider default model")
     ap.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens")
     ap.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
     ap.add_argument("--repeats", type=int, default=3, help="runs per case, to measure non-determinism")
@@ -247,7 +247,7 @@ def main():
         elif args.agent == "claude":
             agent = ClaudeAgent(db, model=args.model or "claude-sonnet-5-5")
         else:
-            agent = OpenAICompatAgent(db, provider=args.agent, model=args.model or "openai/gpt-4.1-mini")
+            agent = OpenAICompatAgent(db, provider=args.agent, model=args.model)
         g_rows += eval_golden(agent, golden, db, i)
         s_rows += eval_safety(agent, attacks, db, i)
 

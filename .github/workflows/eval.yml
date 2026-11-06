@@ -5,16 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       agent:
-        description: "mock | github | claude | openai | deepseek | gemini"
-        default: "github"
+        description: "mock | gemini | deepseek | openai | claude"
+        default: "gemini"
       model:
-        description: "Model id (github: openai/gpt-4.1-mini, openai/gpt-4.1, ...)"
-        default: "openai/gpt-4.1-mini"
+        description: "Optional model id; blank = provider default"
+        default: ""
       repeats:
         default: "2"
 permissions:
   contents: read
-  models: read          # lets GITHUB_TOKEN call GitHub Models (free tier)
 jobs:
   eval:
     runs-on: ubuntu-latest
@@ -25,11 +24,11 @@ jobs:
       - run: pip install openai anthropic
       - name: Run eval (non-zero exit fails the run / PR)
         run: |
-          python harness.py --agent "${{ inputs.agent || 'github' }}" \
-                            --model "${{ inputs.model || 'openai/gpt-4.1-mini' }}" \
+          MODEL="${{ inputs.model }}"
+          python harness.py --agent "${{ inputs.agent || 'mock' }}" \
+                            ${MODEL:+--model "$MODEL"} \
                             --repeats "${{ inputs.repeats || '2' }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

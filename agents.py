@@ -154,21 +154,21 @@ class ClaudeAgent:
 
 
 # --------------------------------------------------------------------------- OpenAI-compatible agent
-PROVIDERS = {   # base_url, API-key env var
-    "github":   ("https://models.github.ai/inference", "GITHUB_TOKEN"),   # free tier via GitHub account
-    "openai":   ("https://api.openai.com/v1", "OPENAI_API_KEY"),
-    "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
-    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY"),
+PROVIDERS = {   # base_url, API-key env var, default model (check provider docs; names change)
+    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-flash-latest"),
+    "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY", "deepseek-chat"),
+    "openai":   ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
 }
 
 
 class OpenAICompatAgent:
     """Same tool-use loop as ClaudeAgent, for any OpenAI-compatible endpoint. Requires: pip install openai."""
 
-    def __init__(self, db_path: str, provider: str = "github", model: str = "openai/gpt-4.1-mini", max_turns: int = 5):
+    def __init__(self, db_path: str, provider: str = "gemini", model: str | None = None, max_turns: int = 5):
         import os
         from openai import OpenAI
-        base_url, key_env = PROVIDERS[provider]
+        base_url, key_env, default_model = PROVIDERS[provider]
+        model = model or default_model
         self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=6)  # retries 429s
         self.db_path, self.model, self.max_turns = db_path, model, max_turns
         self.name = f"{provider}:{model}"
