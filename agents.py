@@ -169,7 +169,7 @@ class OpenAICompatAgent:
         from openai import OpenAI
         base_url, key_env, default_model = PROVIDERS[provider]
         model = model or default_model
-        self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=6)  # retries 429s
+        self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=2, timeout=45)  # fail fast
         self.db_path, self.model, self.max_turns = db_path, model, max_turns
         self.name = f"{provider}:{model}"
         self.tools = [{"type": "function", "function": {
@@ -177,6 +177,19 @@ class OpenAICompatAgent:
             "description": "Run one read-only SQLite SELECT against the warehouse and return rows.",
             "parameters": {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]},
         }}]
+
+    def preflight(self) -> None:
+        """One tiny call before the run; on failure print the models this key can use, then stop."""
+        try:
+            self.client.chat.completions.create(model=self.model, messages=[{"role": "user", "content": "ping"}],
+                                                max_tokens=5)
+        except Exception as e:
+            try:
+                ids = sorted(m.id for m in self.client.models.list())
+            except Exception:
+                ids = []
+            raise SystemExit(f"Preflight failed for {self.name}: {type(e).__name__}: {str(e)[:300]}\n"
+                             f"Models available to this key: {', '.join(ids[:40]) or 'n/a'}")
 
     def run(self, question: str) -> AgentOutput:
         import json
