@@ -263,8 +263,8 @@ def main():
     golden = load_jsonl(ROOT / "data" / "golden_set.jsonl")
     attacks = load_jsonl(ROOT / "data" / "injection_set.jsonl")
 
-    if args.agent not in ("mock", "claude"):                     # fail fast on bad key/model/outage
-        OpenAICompatAgent(db, provider=args.agent, model=args.model).preflight()
+    if args.agent not in ("mock", "claude"):                     # fail fast; pick a model that responds
+        args.model = OpenAICompatAgent(db, provider=args.agent, model=args.model).preflight()
 
     g_rows, s_rows = [], []
     for i in range(args.repeats):

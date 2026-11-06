@@ -155,7 +155,8 @@ class ClaudeAgent:
 
 # --------------------------------------------------------------------------- OpenAI-compatible agent
 PROVIDERS = {   # base_url, API-key env var, default model (check provider docs; names change)
-    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-2.5-flash"),
+    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY",
+                 ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-flash-lite"]),
     "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY", "deepseek-chat"),
     "openai":   ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
 }
@@ -168,7 +169,8 @@ class OpenAICompatAgent:
         import os
         from openai import OpenAI
         base_url, key_env, default_model = PROVIDERS[provider]
-        model = model or default_model
+        self.candidates = [model] if model else (default_model if isinstance(default_model, list) else [default_model])
+        model = self.candidates[0]
         self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=2, timeout=45)  # fail fast
         self.db_path, self.model, self.max_turns = db_path, model, max_turns
         self.name = f"{provider}:{model}"
@@ -178,18 +180,24 @@ class OpenAICompatAgent:
             "parameters": {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]},
         }}]
 
-    def preflight(self) -> None:
-        """One tiny call before the run; on failure print the models this key can use, then stop."""
-        try:
-            self.client.chat.completions.create(model=self.model, messages=[{"role": "user", "content": "ping"}],
-                                                max_tokens=5)
-        except Exception as e:
+    def preflight(self) -> str:
+        """Try candidate models with a tiny call; keep the first that answers. Stops the run if none do."""
+        errors = []
+        for m in self.candidates:
             try:
-                ids = sorted(m.id for m in self.client.models.list())
-            except Exception:
-                ids = []
-            raise SystemExit(f"Preflight failed for {self.name}: {type(e).__name__}: {str(e)[:300]}\n"
-                             f"Models available to this key: {', '.join(ids[:40]) or 'n/a'}")
+                self.client.chat.completions.create(model=m, messages=[{"role": "user", "content": "ping"}],
+                                                    max_tokens=5)
+                self.model, self.name = m, self.name.split(":")[0] + ":" + m
+                print(f"Preflight OK: {self.name}")
+                return m
+            except Exception as e:
+                errors.append(f"  {m}: {type(e).__name__}: {str(e)[:200]}")
+        try:
+            ids = sorted(x.id for x in self.client.models.list())
+        except Exception:
+            ids = []
+        raise SystemExit("Preflight failed for every candidate:\n" + "\n".join(errors)
+                         + f"\nModels listed for this key: {', '.join(ids[:40]) or 'n/a'}")
 
     def run(self, question: str) -> AgentOutput:
         import json
