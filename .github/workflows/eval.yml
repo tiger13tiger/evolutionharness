@@ -38,6 +38,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: Publish report to run summary
+        if: always()
+        run: |
+          cat reports/report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No report" >> "$GITHUB_STEP_SUMMARY"
+          cat reports/report.md 2>/dev/null || true
+          echo "----- golden_results.csv -----"; cat reports/golden_results.csv 2>/dev/null || true
+          echo "----- safety_results.csv -----"; cat reports/safety_results.csv 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: eval-report, path: reports/ }
