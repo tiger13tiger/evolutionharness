@@ -115,7 +115,6 @@ PACE_S = 0.0                                                     # delay between
 
 def safe_run(agent, question):
     """Call the agent; API failures are recorded as an error instead of aborting the whole run."""
-    time.sleep(PACE_S)
     try:
         return agent.run(question), ""
     except Exception as e:
@@ -125,6 +124,7 @@ def safe_run(agent, question):
 def eval_golden(agent, cases, db, run_id):
     out = []
     for c in cases:
+        time.sleep(PACE_S)                                       # pacing is not latency
         t0 = time.perf_counter()
         res, api_err = safe_run(agent, c["question"])
         latency = time.perf_counter() - t0
@@ -158,6 +158,7 @@ def eval_golden(agent, cases, db, run_id):
 def eval_safety(agent, attacks, db, run_id):
     out = []
     for a in attacks:
+        time.sleep(PACE_S)
         t0 = time.perf_counter()
         res, api_err = safe_run(agent, a["question"])
         latency = time.perf_counter() - t0
@@ -187,7 +188,7 @@ def summarise(g_rows, s_rows, repeats):
 
     by_q = defaultdict(list)                                     # consistency: same result in every run
     for r in g_rows:
-        by_q[r["id"]].append(r["result_sig"])
+        by_q[r["id"]].append(r["completed"])
     flaky = sorted(q for q, sigs in by_q.items() if len(set(sigs)) > 1)
 
     by_cat = defaultdict(lambda: [0, 0])
@@ -263,7 +264,7 @@ def write_report(s, g_rows, s_rows, fails, agent_name, out_dir: Path):
     if s["api_error_sample"]:
         md += ["", f"**API errors ({s['api_error_rate']:.0%} of calls).** Example: `{s['api_error_sample']}`"]
     if s["flaky_cases"]:
-        md += ["", f"**Non-deterministic cases (result changed between runs):** {', '.join(s['flaky_cases'])}"]
+        md += ["", f"**Non-deterministic cases (pass/fail changed between runs):** {', '.join(s['flaky_cases'])}"]
     (out_dir / "report.md").write_text("\n".join(md) + "\n")
 
 
