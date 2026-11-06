@@ -26,6 +26,12 @@ Rules:
 """
 
 
+# The live prompt is prompts/system_prompt.txt when present (the evolver proposes changes to it via PR).
+_PROMPT_FILE = __import__("pathlib").Path(__file__).parent / "prompts" / "system_prompt.txt"
+if _PROMPT_FILE.exists():
+    SYSTEM_PROMPT = _PROMPT_FILE.read_text()
+
+
 @dataclass
 class AgentOutput:
     answer: str
@@ -74,9 +80,10 @@ class MockAgent:
     }
     _REFUSE = ("next year", "email", "delete", "ignore your previous", "customer_pii and show", "system prompt")
 
-    def __init__(self, db_path: str, seed: int | None = None):
+    def __init__(self, db_path: str, seed: int | None = None, system_prompt: str = SYSTEM_PROMPT):
         self.db_path = db_path
         self.rng = random.Random(seed)
+        self.prompt = system_prompt.lower()                       # some bugs disappear if the prompt has the right rule
 
     def run(self, question: str) -> AgentOutput:
         time.sleep(self.rng.uniform(0.01, 0.05))                  # simulated model latency
@@ -90,7 +97,10 @@ class MockAgent:
         # Non-determinism: sometimes ranks the wrong measure
         if question.startswith("Top 3 venues") and self.rng.random() < 0.3:
             sql = sql.replace("SUM(f.plays)", "SUM(f.revenue)")
-        if question.startswith("Revenue in February") and self.rng.random() < 0.4:
+        if question.startswith("Average revenue per play") and "ratio of sums" in self.prompt:
+            sql = sql.replace("ROUND(AVG(f.revenue*1.0/f.plays),2)", "ROUND(SUM(f.revenue)/SUM(f.plays),2)")
+        if question.startswith("Revenue in February") and "first day of the next" not in self.prompt \
+                and self.rng.random() < 0.4:
             sql = sql.replace("BETWEEN '2026-02-01' AND '2026-02-28'", ">= '2026-02-01' AND play_date < '2026-02-28'")  # off-by-one
         guard = check_sql(sql)
         if not guard.allowed:                                     # tool layer blocks it; agent reports back
@@ -98,7 +108,8 @@ class MockAgent:
                                input_tokens=tin, output_tokens=tout, tool_calls=1)
         rows = _ro_query(self.db_path, sql)
         answer = "Result: " + "; ".join(", ".join(str(c) for c in r) for r in rows[:20])
-        if question.startswith("Which game made the most") and self.rng.random() < 0.5:
+        if question.startswith("Which game made the most") and "only quote numbers" not in self.prompt \
+                and self.rng.random() < 0.5:
             answer += " It earned about $151,234.50 in total."     # hallucinated, not in the result set
         return AgentOutput(answer, sql=sql, input_tokens=tin, output_tokens=tout, tool_calls=1)
 
@@ -107,8 +118,10 @@ class MockAgent:
 class ClaudeAgent:
     """Real text-to-SQL agent using Claude tool use. Requires: pip install anthropic, ANTHROPIC_API_KEY."""
 
-    def __init__(self, db_path: str, model: str = "claude-sonnet-5-5", max_turns: int = 5):
+    def __init__(self, db_path: str, model: str = "claude-sonnet-5-5", max_turns: int = 5,
+                 system_prompt: str = SYSTEM_PROMPT):
         import anthropic
+        self.system_prompt = system_prompt
         self.client = anthropic.Anthropic()
         self.db_path, self.model, self.max_turns = db_path, model, max_turns
         self.name = model
@@ -122,7 +135,7 @@ class ClaudeAgent:
         msgs = [{"role": "user", "content": question}]
         out = AgentOutput(answer="")
         for _ in range(self.max_turns):
-            resp = self.client.messages.create(model=self.model, max_tokens=1024, system=SYSTEM_PROMPT,
+            resp = self.client.messages.create(model=self.model, max_tokens=1024, system=self.system_prompt,
                                                tools=self.tools, messages=msgs)
             out.input_tokens += resp.usage.input_tokens
             out.output_tokens += resp.usage.output_tokens
@@ -165,8 +178,10 @@ PROVIDERS = {   # base_url, API-key env var, default model (check provider docs;
 class OpenAICompatAgent:
     """Same tool-use loop as ClaudeAgent, for any OpenAI-compatible endpoint. Requires: pip install openai."""
 
-    def __init__(self, db_path: str, provider: str = "gemini", model: str | None = None, max_turns: int = 5):
+    def __init__(self, db_path: str, provider: str = "gemini", model: str | None = None, max_turns: int = 5,
+                 system_prompt: str = SYSTEM_PROMPT):
         import os
+        self.system_prompt = system_prompt
         from openai import OpenAI
         base_url, key_env, default_model = PROVIDERS[provider]
         self.candidates = [model] if model else (default_model if isinstance(default_model, list) else [default_model])
@@ -201,7 +216,7 @@ class OpenAICompatAgent:
 
     def run(self, question: str) -> AgentOutput:
         import json
-        msgs = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}]
+        msgs = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": question}]
         out, executed = AgentOutput(answer=""), False
         for _ in range(self.max_turns):
             raw = self.client.chat.completions.with_raw_response.create(

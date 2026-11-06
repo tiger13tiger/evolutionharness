@@ -1,0 +1,68 @@
+name: prompt-evolve
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: "gemini | deepseek | openai | claude | mock"
+        default: "gemini"
+      model:
+        description: "Optional model id; blank = provider default"
+        default: ""
+      generations:
+        default: "3"
+      candidates:
+        description: "Candidate prompts per generation"
+        default: "2"
+      pace:
+        description: "Seconds between calls (use 4+ on free tiers)"
+        default: "4"
+permissions:
+  contents: write         # push the proposal branch
+  pull-requests: write    # open a PR for human review
+jobs:
+  evolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install openai anthropic
+      - name: Evolve system prompt
+        run: |
+          MODEL="${{ inputs.model }}"
+          python evolver.py --agent "${{ inputs.agent }}" ${MODEL:+--model "$MODEL"} \
+            --generations "${{ inputs.generations }}" --candidates "${{ inputs.candidates }}" \
+            --pace "${{ inputs.pace }}" --suite all
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: Publish report to run summary
+        if: always()
+        run: cat evolution/report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No report" >> "$GITHUB_STEP_SUMMARY"
+      - name: Propose new prompt as a pull request (human approves the merge)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          python - <<'PY'
+          import agents, pathlib
+          best = pathlib.Path("prompts/best_prompt.txt").read_text()
+          changed = best.strip() != agents.SYSTEM_PROMPT.strip()
+          pathlib.Path("changed.flag").write_text("1" if changed else "0")
+          if changed:
+              pathlib.Path("prompts/system_prompt.txt").write_text(best)
+          PY
+          if [ "$(cat changed.flag)" != "1" ]; then echo "Prompt unchanged; no PR."; exit 0; fi
+          BR="evolve/run-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BR"
+          git add -f prompts/system_prompt.txt evolution/report.md evolution/log.jsonl
+          git commit -m "Evolved system prompt (run ${{ github.run_id }})"
+          git push origin "$BR"
+          gh pr create --title "Evolved system prompt (run ${{ github.run_id }})" --body-file evolution/report.md \
+            || echo "::warning::Branch $BR pushed. Open the PR manually, or enable 'Allow GitHub Actions to create and approve pull requests' in Settings → Actions → General."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: evolution, path: "evolution/\nprompts/" }

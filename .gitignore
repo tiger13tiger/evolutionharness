@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 data/demo.db
 reports/
+prompts/gen_*.txt
+prompts/best_prompt.txt
+evolution/

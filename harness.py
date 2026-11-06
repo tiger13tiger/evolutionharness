@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 import demo_db
-from agents import PROVIDERS, AgentOutput, ClaudeAgent, MockAgent, OpenAICompatAgent
+from agents import PROVIDERS, SYSTEM_PROMPT, AgentOutput, ClaudeAgent, MockAgent, OpenAICompatAgent
 from guardrails import check_sql, contains_pii
 
 ROOT = Path(__file__).parent
@@ -268,45 +268,69 @@ def write_report(s, g_rows, s_rows, fails, agent_name, out_dir: Path):
     (out_dir / "report.md").write_text("\n".join(md) + "\n")
 
 
-# --------------------------------------------------------------------------- main
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--agent", choices=["mock", "claude", *PROVIDERS], default="mock")
-    ap.add_argument("--model", default=None, help="override provider default model")
-    ap.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens")
-    ap.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
-    ap.add_argument("--repeats", type=int, default=3, help="runs per case, to measure non-determinism")
-    ap.add_argument("--pace", type=float, default=0.0, help="seconds between calls (free tiers)")
-    args = ap.parse_args()
+# --------------------------------------------------------------------------- reusable entry points
+SUITES = {"basic": ["golden_set.jsonl"], "hard": ["hard_set.jsonl"], "all": ["golden_set.jsonl", "hard_set.jsonl"]}
+
+
+def load_suite(name: str) -> list[dict]:
+    return [c for f in SUITES[name] for c in load_jsonl(ROOT / "data" / f)]
+
+
+def make_agent(kind: str, db: str, model: str | None, seed: int, prompt: str):
+    if kind == "mock":
+        return MockAgent(db, seed=seed, system_prompt=prompt)
+    if kind == "claude":
+        return ClaudeAgent(db, model=model or "claude-sonnet-5-5", system_prompt=prompt)
+    return OpenAICompatAgent(db, provider=kind, model=model, system_prompt=prompt)
+
+
+def run_suite(kind, db, model, prompt, golden, attacks, repeats, run_offset=0):
+    """Evaluate one prompt. Returns (summary, golden_rows, safety_rows)."""
+    g_rows, s_rows, agent = [], [], None
+    for i in range(repeats):
+        agent = make_agent(kind, db, model, seed=run_offset + i, prompt=prompt)
+        g_rows += eval_golden(agent, golden, db, i)
+        s_rows += eval_safety(agent, attacks, db, i) if attacks else []
+    return summarise(g_rows, s_rows, repeats), g_rows, s_rows, getattr(agent, "name", kind)
+
+
+def setup(args):
+    """Shared CLI setup for harness and evolver: pacing, prices, DB, model preflight."""
     global PACE_S
     PACE_S = args.pace
-
     if args.price_in is not None:
         PRICE_PER_MTOK["input"] = args.price_in
     if args.price_out is not None:
         PRICE_PER_MTOK["output"] = args.price_out
     db = str(demo_db.build())
-    golden = load_jsonl(ROOT / "data" / "golden_set.jsonl")
-    attacks = load_jsonl(ROOT / "data" / "injection_set.jsonl")
-
     if args.agent not in ("mock", "claude"):                     # fail fast; pick a model that responds
         args.model = OpenAICompatAgent(db, provider=args.agent, model=args.model).preflight()
+    return db
 
-    g_rows, s_rows = [], []
-    for i in range(args.repeats):
-        if args.agent == "mock":
-            agent = MockAgent(db, seed=i)
-        elif args.agent == "claude":
-            agent = ClaudeAgent(db, model=args.model or "claude-sonnet-5-5")
-        else:
-            agent = OpenAICompatAgent(db, provider=args.agent, model=args.model)
-        g_rows += eval_golden(agent, golden, db, i)
-        s_rows += eval_safety(agent, attacks, db, i)
 
-    s = summarise(g_rows, s_rows, args.repeats)
+def add_common_args(ap):
+    ap.add_argument("--agent", choices=["mock", "claude", *PROVIDERS], default="mock")
+    ap.add_argument("--model", default=None, help="override provider default model")
+    ap.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens")
+    ap.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
+    ap.add_argument("--pace", type=float, default=0.0, help="seconds between calls (free tiers)")
+    ap.add_argument("--suite", choices=list(SUITES), default="basic")
+    ap.add_argument("--prompt-file", default=None, help="system prompt to evaluate (default: built-in)")
+
+
+# --------------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser()
+    add_common_args(ap)
+    ap.add_argument("--repeats", type=int, default=3, help="runs per case, to measure non-determinism")
+    args = ap.parse_args()
+    db = setup(args)
+    prompt = Path(args.prompt_file).read_text() if args.prompt_file else SYSTEM_PROMPT
+    golden, attacks = load_suite(args.suite), load_jsonl(ROOT / "data" / "injection_set.jsonl")
+
+    s, g_rows, s_rows, name = run_suite(args.agent, db, args.model, prompt, golden, attacks, args.repeats)
     fails = check_thresholds(s)
-    out_dir = ROOT / "reports"
-    write_report(s, g_rows, s_rows, fails, getattr(agent, "name", args.agent), out_dir)
+    write_report(s, g_rows, s_rows, fails, name, ROOT / "reports")
     print(json.dumps(s, indent=2))
     print("GATE:", "PASS" if not fails else "FAIL -> " + "; ".join(fails))
     raise SystemExit(1 if fails else 0)

@@ -18,3 +18,18 @@ Exit code 1 when a metric misses `THRESHOLDS` in `harness.py`, so the GitHub Act
 | `guardrails.py` | Read-only, single-statement, table allow-list, PII block |
 | `agents.py` | `MockAgent` (seeded failure modes) and `ClaudeAgent` (tool-use loop) |
 | `harness.py` | Metrics, repeated runs, report, CI gate |
+
+## Prompt evolution
+
+```bash
+python evolver.py --agent mock --suite basic                          # offline demo
+python evolver.py --agent gemini --generations 3 --candidates 2 --pace 4
+```
+
+Each generation: collect failed **train** cases → mutator LLM writes candidate prompts → accept only if
+train improves, **holdout** (never shown to the mutator) does not drop, and safety stays 100%.
+Candidates that drop safety rules or leak test questions/answers are rejected before evaluation.
+In CI (`prompt-evolve` workflow) the winning prompt is opened as a PR to `prompts/system_prompt.txt`;
+a human reviews the diff and report before merging.
+
+`data/hard_set.jsonl` adds business-logic traps (data grain, ratios, period comparisons, launch windows, ambiguity).
