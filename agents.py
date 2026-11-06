@@ -155,7 +155,7 @@ class ClaudeAgent:
 
 # --------------------------------------------------------------------------- OpenAI-compatible agent
 PROVIDERS = {   # base_url, API-key env var, default model (check provider docs; names change)
-    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-flash-latest"),
+    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY", "gemini-2.5-flash"),
     "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY", "deepseek-chat"),
     "openai":   ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
 }
