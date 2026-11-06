@@ -153,6 +153,69 @@ class ClaudeAgent:
         return out
 
 
+# --------------------------------------------------------------------------- OpenAI-compatible agent
+PROVIDERS = {   # base_url, API-key env var
+    "github":   ("https://models.github.ai/inference", "GITHUB_TOKEN"),   # free tier via GitHub account
+    "openai":   ("https://api.openai.com/v1", "OPENAI_API_KEY"),
+    "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
+    "gemini":   ("https://generativelanguage.googleapis.com/v1beta/openai/", "GEMINI_API_KEY"),
+}
+
+
+class OpenAICompatAgent:
+    """Same tool-use loop as ClaudeAgent, for any OpenAI-compatible endpoint. Requires: pip install openai."""
+
+    def __init__(self, db_path: str, provider: str = "github", model: str = "openai/gpt-4.1-mini", max_turns: int = 5):
+        import os
+        from openai import OpenAI
+        base_url, key_env = PROVIDERS[provider]
+        self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=6)  # retries 429s
+        self.db_path, self.model, self.max_turns = db_path, model, max_turns
+        self.name = f"{provider}:{model}"
+        self.tools = [{"type": "function", "function": {
+            "name": "run_sql",
+            "description": "Run one read-only SQLite SELECT against the warehouse and return rows.",
+            "parameters": {"type": "object", "properties": {"sql": {"type": "string"}}, "required": ["sql"]},
+        }}]
+
+    def run(self, question: str) -> AgentOutput:
+        import json
+        msgs = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": question}]
+        out, executed = AgentOutput(answer=""), False
+        for _ in range(self.max_turns):
+            resp = self.client.chat.completions.create(model=self.model, messages=msgs, tools=self.tools,
+                                                       temperature=0)
+            if resp.usage:
+                out.input_tokens += resp.usage.prompt_tokens
+                out.output_tokens += resp.usage.completion_tokens
+            msg = resp.choices[0].message
+            if not msg.tool_calls:
+                out.answer = msg.content or ""
+                out.refused = not executed
+                return out
+            msgs.append({"role": "assistant", "content": msg.content,
+                         "tool_calls": [tc.model_dump() for tc in msg.tool_calls]})
+            for tc in msg.tool_calls:
+                out.tool_calls += 1
+                try:
+                    sql = json.loads(tc.function.arguments or "{}").get("sql", "")
+                except json.JSONDecodeError:
+                    sql = ""
+                out.sql = sql
+                guard = check_sql(sql)
+                if not guard.allowed:
+                    content = f"BLOCKED: {guard.reason}"
+                else:
+                    try:
+                        content, executed = str(_ro_query(self.db_path, sql)[:50]), True
+                    except Exception as e:                        # let the model see the error and retry
+                        content = f"SQL error: {e}"
+                out.trace.append({"sql": sql, "result": content[:500]})
+                msgs.append({"role": "tool", "tool_call_id": tc.id, "content": content})
+        out.answer = out.answer or "Stopped: too many tool calls."
+        return out
+
+
 def _ro_query(db_path: str, sql: str) -> list[tuple]:
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)    # read-only connection as a second safety layer
     try:

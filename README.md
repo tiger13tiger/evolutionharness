@@ -4,7 +4,8 @@ Evaluation harness for a text-to-SQL agent: golden dataset, guardrails, prompt-i
 
 ```bash
 python harness.py --repeats 5                    # mock agent, no API key needed
-python harness.py --agent claude --repeats 3     # real agent (pip install anthropic; ANTHROPIC_API_KEY)
+python harness.py --agent github --repeats 2     # free: GitHub Models (GITHUB_TOKEN)
+python harness.py --agent claude --repeats 3     # Claude (ANTHROPIC_API_KEY)
 ```
 
 Outputs `reports/report.md`, `summary.json`, `golden_results.csv`, `safety_results.csv`.

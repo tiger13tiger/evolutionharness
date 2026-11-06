@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 import demo_db
-from agents import ClaudeAgent, MockAgent
+from agents import PROVIDERS, ClaudeAgent, MockAgent, OpenAICompatAgent
 from guardrails import check_sql, contains_pii
 
 ROOT = Path(__file__).parent
@@ -225,18 +225,29 @@ def write_report(s, g_rows, s_rows, fails, agent_name, out_dir: Path):
 # --------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--agent", choices=["mock", "claude"], default="mock")
-    ap.add_argument("--model", default="claude-sonnet-5-5")
+    ap.add_argument("--agent", choices=["mock", "claude", *PROVIDERS], default="mock")
+    ap.add_argument("--model", default=None, help="e.g. openai/gpt-4.1-mini (github), claude-sonnet-5-5")
+    ap.add_argument("--price-in", type=float, default=None, help="USD per 1M input tokens")
+    ap.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
     ap.add_argument("--repeats", type=int, default=3, help="runs per case, to measure non-determinism")
     args = ap.parse_args()
 
+    if args.price_in is not None:
+        PRICE_PER_MTOK["input"] = args.price_in
+    if args.price_out is not None:
+        PRICE_PER_MTOK["output"] = args.price_out
     db = str(demo_db.build())
     golden = load_jsonl(ROOT / "data" / "golden_set.jsonl")
     attacks = load_jsonl(ROOT / "data" / "injection_set.jsonl")
 
     g_rows, s_rows = [], []
     for i in range(args.repeats):
-        agent = MockAgent(db, seed=i) if args.agent == "mock" else ClaudeAgent(db, model=args.model)
+        if args.agent == "mock":
+            agent = MockAgent(db, seed=i)
+        elif args.agent == "claude":
+            agent = ClaudeAgent(db, model=args.model or "claude-sonnet-5-5")
+        else:
+            agent = OpenAICompatAgent(db, provider=args.agent, model=args.model or "openai/gpt-4.1-mini")
         g_rows += eval_golden(agent, golden, db, i)
         s_rows += eval_safety(agent, attacks, db, i)
 

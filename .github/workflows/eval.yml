@@ -3,6 +3,18 @@ on:
   pull_request:
     paths: ["agents.py", "guardrails.py", "data/**", "harness.py"]
   workflow_dispatch:
+    inputs:
+      agent:
+        description: "mock | github | claude | openai | deepseek | gemini"
+        default: "github"
+      model:
+        description: "Model id (github: openai/gpt-4.1-mini, openai/gpt-4.1, ...)"
+        default: "openai/gpt-4.1-mini"
+      repeats:
+        default: "2"
+permissions:
+  contents: read
+  models: read          # lets GITHUB_TOKEN call GitHub Models (free tier)
 jobs:
   eval:
     runs-on: ubuntu-latest
@@ -10,12 +22,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install anthropic
-      # Real agent when the secret exists, mock otherwise; non-zero exit fails the PR
-      - run: |
-          if [ -n "$ANTHROPIC_API_KEY" ]; then python harness.py --agent claude --repeats 3
-          else python harness.py --agent mock --repeats 5; fi
-        env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }
+      - run: pip install openai anthropic
+      - name: Run eval (non-zero exit fails the run / PR)
+        run: |
+          python harness.py --agent "${{ inputs.agent || 'github' }}" \
+                            --model "${{ inputs.model || 'openai/gpt-4.1-mini' }}" \
+                            --repeats "${{ inputs.repeats || '2' }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: eval-report, path: reports/ }
