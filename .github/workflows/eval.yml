@@ -1,0 +1,21 @@
+name: agent-eval
+on:
+  pull_request:
+    paths: ["agents.py", "guardrails.py", "data/**", "harness.py"]
+  workflow_dispatch:
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install anthropic
+      # Real agent when the secret exists, mock otherwise; non-zero exit fails the PR
+      - run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then python harness.py --agent claude --repeats 3
+          else python harness.py --agent mock --repeats 5; fi
+        env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: eval-report, path: reports/ }
