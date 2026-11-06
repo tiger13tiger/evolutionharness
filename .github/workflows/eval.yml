@@ -12,6 +12,9 @@ on:
         default: ""
       repeats:
         default: "2"
+      pace:
+        description: "Seconds between calls (use 4+ on free tiers)"
+        default: "4"
 permissions:
   contents: read
 jobs:
@@ -27,7 +30,8 @@ jobs:
           MODEL="${{ inputs.model }}"
           python harness.py --agent "${{ inputs.agent || 'mock' }}" \
                             ${MODEL:+--model "$MODEL"} \
-                            --repeats "${{ inputs.repeats || '2' }}"
+                            --repeats "${{ inputs.repeats || '2' }}" \
+                            --pace "${{ inputs.pace || '0' }}"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
