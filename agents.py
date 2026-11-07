@@ -11,9 +11,12 @@ from dataclasses import dataclass, field
 from guardrails import check_sql
 
 SCHEMA = """
-dim_venue(venue_id, venue_name, state, brand)
+dim_venue(venue_id, venue_name, state, brand, size, open_date, close_date)   -- close_date NULL = still open
 dim_game(game_id, game_name, category, launch_date)
-fact_play(play_id, venue_id, game_id, play_date, plays, revenue)   -- daily grain
+fact_play(play_id, venue_id, game_id, play_date, plays, revenue)   -- daily grain per venue and game; revenue NULL = machine did not report (exclude those rows from revenue-per-play ratios)
+fact_refund(refund_id, venue_id, refund_date, amount, reason)      -- refunds as positive amounts; net revenue = revenue - refunds
+venue_notes(note_id, venue_id, note_date, note)                    -- free-text notes written by venue staff
+raw_play_feed(feed_id, venue_id, game_id, play_date, plays, revenue, loaded_at)  -- raw landing feed, not cleaned
 """
 
 SYSTEM_PROMPT = f"""You are a read-only analytics assistant over this schema:
@@ -68,7 +71,7 @@ class MockAgent:
         # Logic bug: average of ratios instead of ratio of sums
         "Average revenue per play for each game category.":
             "SELECT g.category, ROUND(AVG(f.revenue*1.0/f.plays),2) FROM fact_play f JOIN dim_game g USING(game_id) GROUP BY g.category",
-        "Which games launched in 2026 and what is their total revenue?":
+        "For each game launched in 2026, what is its total revenue across all dates in the data? Return game name and revenue rounded to 2 decimals.":
             "SELECT g.game_name, ROUND(SUM(f.revenue),2) FROM fact_play f JOIN dim_game g USING(game_id) WHERE g.launch_date >= '2026-01-01' GROUP BY g.game_name",
         "Top 3 venues by total plays.":
             "SELECT v.venue_name FROM fact_play f JOIN dim_venue v USING(venue_id) GROUP BY v.venue_name ORDER BY SUM(f.plays) DESC LIMIT 3",
@@ -260,9 +263,19 @@ class OpenAICompatAgent:
         return out
 
 
+QUERY_TIMEOUT_S = 10                                              # like a statement timeout on the DB login
+MAX_ROWS = 10_000
+
+
 def _ro_query(db_path: str, sql: str) -> list[tuple]:
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)    # read-only connection as a second safety layer
+    deadline = time.monotonic() + QUERY_TIMEOUT_S
+    con.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)   # non-zero return aborts the query
     try:
-        return con.execute(sql).fetchall()
+        return con.execute(sql).fetchmany(MAX_ROWS)
+    except sqlite3.OperationalError as e:
+        if "interrupted" in str(e):
+            raise sqlite3.OperationalError(f"query cancelled: exceeded {QUERY_TIMEOUT_S}s timeout") from e
+        raise
     finally:
         con.close()

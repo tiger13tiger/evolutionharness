@@ -1,9 +1,347 @@
 {
-  "G01": ["count"], "G02": ["filter"], "G03": ["sum"], "G04": ["group_sort", "sum"], "G05": ["topk"],
-  "G06": ["group_sort", "sum"], "G07": ["month_range"], "G08": ["month_range"], "G09": ["ratio_of_sums"],
-  "G10": ["launch_filter"], "G11": ["topk"], "G12": ["out_of_scope"], "G13": ["out_of_scope"], "G14": ["out_of_scope"],
-  "H01": ["daily_grain", "month_range"], "H02": ["daily_grain"], "H03": ["top_per_group", "daily_grain"],
-  "H04": ["per_entity_avg"], "H05": ["share_pct"], "H06": ["ratio_of_sums", "filter"], "H07": ["period_growth"],
-  "H08": ["weekday", "daily_grain"], "H09": ["relative_window"], "H10": ["launch_window"], "H11": ["launch_window"],
-  "H12": ["ambiguous"]
+"G01": [
+"count"
+],
+"G02": [
+"filter"
+],
+"G03": [
+"sum"
+],
+"G04": [
+"group_sort",
+"sum"
+],
+"G05": [
+"topk"
+],
+"G06": [
+"group_sort",
+"sum"
+],
+"G07": [
+"month_range"
+],
+"G08": [
+"month_range"
+],
+"G09": [
+"ratio_of_sums"
+],
+"G10": [
+"launch_filter"
+],
+"G11": [
+"topk"
+],
+"G12": [
+"out_of_scope"
+],
+"G13": [
+"out_of_scope"
+],
+"G14": [
+"out_of_scope"
+],
+"H01": [
+"daily_grain",
+"month_range"
+],
+"H02": [
+"daily_grain"
+],
+"H03": [
+"top_per_group",
+"daily_grain"
+],
+"H04": [
+"per_entity_avg"
+],
+"H05": [
+"share_pct"
+],
+"H06": [
+"ratio_of_sums",
+"filter"
+],
+"H07": [
+"period_growth"
+],
+"H08": [
+"weekday",
+"daily_grain"
+],
+"H09": [
+"relative_window"
+],
+"H10": [
+"launch_window"
+],
+"H11": [
+"launch_window"
+],
+"H12": [
+"ambiguous"
+],
+"X01": [
+"count",
+"group_sort"
+],
+"X02": [
+"filter"
+],
+"X03": [
+"filter"
+],
+"X04": [
+"filter"
+],
+"X05": [
+"filter"
+],
+"X06": [
+"count",
+"launch_filter"
+],
+"X07": [
+"sum"
+],
+"X08": [
+"group_sort",
+"sum"
+],
+"X09": [
+"group_sort",
+"sum"
+],
+"X10": [
+"sum",
+"month_range"
+],
+"X11": [
+"sum"
+],
+"X12": [
+"group_sort",
+"sum"
+],
+"X13": [
+"group_sort",
+"sum"
+],
+"X14": [
+"group_sort",
+"sum"
+],
+"X15": [
+"sum",
+"filter"
+],
+"X16": [
+"topk",
+"filter"
+],
+"X17": [
+"sum",
+"filter"
+],
+"X18": [
+"month_range"
+],
+"X19": [
+"month_range",
+"group_sort"
+],
+"X20": [
+"date_range"
+],
+"X21": [
+"date_range"
+],
+"X22": [
+"filter"
+],
+"X23": [
+"month_range",
+"group_sort"
+],
+"X24": [
+"daily_grain",
+"topk"
+],
+"X25": [
+"topk"
+],
+"X26": [
+"topk"
+],
+"X27": [
+"top_per_group"
+],
+"X28": [
+"topk"
+],
+"X29": [
+"topk",
+"month_range"
+],
+"X30": [
+"daily_grain",
+"venue_status"
+],
+"X31": [
+"daily_grain",
+"launch_window"
+],
+"X32": [
+"daily_grain",
+"month_range"
+],
+"X33": [
+"weekday",
+"daily_grain"
+],
+"X34": [
+"daily_grain",
+"topk"
+],
+"X35": [
+"daily_grain"
+],
+"X36": [
+"ratio_of_sums"
+],
+"X37": [
+"share_pct"
+],
+"X38": [
+"share_pct",
+"weekday"
+],
+"X39": [
+"per_entity_avg"
+],
+"X40": [
+"share_pct",
+"net_revenue"
+],
+"X41": [
+"ratio_of_sums"
+],
+"X42": [
+"net_revenue"
+],
+"X43": [
+"net_revenue"
+],
+"X44": [
+"net_revenue",
+"group_sort"
+],
+"X45": [
+"topk"
+],
+"X46": [
+"count",
+"month_range"
+],
+"X47": [
+"net_revenue",
+"month_range"
+],
+"X48": [
+"count"
+],
+"X49": [
+"dedupe"
+],
+"X50": [
+"count",
+"filter"
+],
+"X51": [
+"count",
+"filter"
+],
+"X52": [
+"count",
+"orphan"
+],
+"X53": [
+"count",
+"filter"
+],
+"X54": [
+"count",
+"filter"
+],
+"X55": [
+"count",
+"venue_status"
+],
+"X56": [
+"venue_status",
+"sum"
+],
+"X57": [
+"venue_status",
+"month_range"
+],
+"X58": [
+"venue_status",
+"daily_grain"
+],
+"X59": [
+"launch_window"
+],
+"X60": [
+"launch_window"
+],
+"X61": [
+"launch_window",
+"topk"
+],
+"X62": [
+"launch_window",
+"daily_grain"
+],
+"X63": [
+"launch_filter"
+],
+"X64": [
+"period_growth"
+],
+"X65": [
+"period_growth"
+],
+"X66": [
+"period_growth"
+],
+"X67": [
+"month_range",
+"topk"
+],
+"X68": [
+"daily_grain",
+"date_range"
+],
+"X69": [
+"count",
+"group_sort"
+],
+"X70": [
+"filter"
+],
+"X71": [
+"out_of_scope"
+],
+"X72": [
+"out_of_scope"
+],
+"X73": [
+"out_of_scope"
+],
+"X74": [
+"ambiguous"
+]
 }

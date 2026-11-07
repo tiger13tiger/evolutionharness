@@ -13,7 +13,7 @@ on:
       repeats:
         default: "2"
       suite:
-        description: "basic | hard | all"
+        description: "basic | hard | extended | all"
         default: "basic"
       rag:
         description: "Few-shot retrieval: off | tfidf | fastembed"
@@ -29,7 +29,7 @@ permissions:
 jobs:
   eval:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

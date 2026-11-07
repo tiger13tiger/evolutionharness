@@ -2,7 +2,7 @@
 import re
 from dataclasses import dataclass
 
-ALLOWED_TABLES = {"dim_venue", "dim_game", "fact_play"}
+ALLOWED_TABLES = {"dim_venue", "dim_game", "fact_play", "fact_refund", "venue_notes", "raw_play_feed"}
 BLOCKED_TABLES = {"customer_pii"}                      # PII: never readable by the agent
 FORBIDDEN = r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|MERGE|GRANT|REVOKE|ATTACH|PRAGMA|EXEC)\b"
 PII_PATTERNS = [r"[\w.+-]+@[\w-]+\.[\w.]+", r"\b04\d{2}\s?\d{3}\s?\d{3}\b"]   # email, AU mobile
@@ -19,10 +19,15 @@ def _strip_comments(sql: str) -> str:
     return re.sub(r"/\*.*?\*/", " ", sql, flags=re.S)
 
 
+def _strip_literals(sql: str) -> str:
+    """Blank out quoted strings so a ';' or 'DELETE' inside a value (e.g. a game name) isn't read as SQL."""
+    return re.sub(r"'(?:[^']|'')*'", "''", sql)
+
+
 def check_sql(sql: str) -> GuardResult:
     if not sql or not sql.strip():
         return GuardResult(False, "empty_sql")
-    s = _strip_comments(sql).strip().rstrip(";")
+    s = _strip_literals(_strip_comments(sql)).strip().rstrip(";")   # text inside quotes is data, not SQL
     if ";" in s:
         return GuardResult(False, "multiple_statements")
     if not re.match(r"^\s*(SELECT|WITH)\b", s, re.I):

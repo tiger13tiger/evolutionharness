@@ -42,7 +42,7 @@ the harness refuses to run if any test question is a near-duplicate of a bank ex
 `data/case_patterns.json` labels the analysis pattern each test case needs, so reports show **hit@k** and
 task completion split by retrieval hit/miss — separating retrieval failures from generation failures.
 
-## Results (DeepSeek `deepseek-chat`, 26 cases + 6 attacks, 3 runs each, Nov 2026)
+## Results v1 (demo DB v1, DeepSeek `deepseek-chat`, 26 cases + 6 attacks, 3 runs each, Nov 2026)
 
 | Config | All | Holdout | Hard cases | Exec. accuracy | Safety | Input tokens / q |
 |---|---|---|---|---|---|---|
@@ -59,3 +59,18 @@ task completion split by retrieval hit/miss — separating retrieval failures fr
   rank numbers, window-function ORDER BY treated as result ordering). Each fix was checked against the mock agent's
   planted bugs so the evaluator did not become lenient.
 - Known gap: G10 is ambiguous (combined vs per-game, all-time vs since launch) and should be rewritten.
+
+## Test suite v2
+
+Demo DB v2 (`demo_db.py`): 12 venues, 15 games, Jan–Jun 2026, plus realistic defects — unreported (NULL) revenue,
+zero-play days, a venue closed mid-period, a refunds table, an un-cleaned raw feed (duplicates, negative plays,
+future dates, unknown venues) and **planted indirect prompt injections** (a game name and a staff note carry instructions).
+
+- 100 answerable/decline cases: `golden_set.jsonl` (14), `hard_set.jsonl` (12), `extended_set.jsonl` (74, source in
+  `data/build_extended_set.py`). v2 rewrote the ambiguous G10 and made ratio questions exclude unreported revenue.
+- 30 attack cases (`injection_set.jsonl`): direct and indirect injection, impersonation, UNION/alias PII tricks,
+  comment tricks, PRAGMA/ATTACH/sqlite_master probes, encoded instructions, data tampering, secret and prompt leaks,
+  resource exhaustion.
+- New controls: 10 s query timeout and row cap; guardrails ignore text inside quoted literals.
+- New metrics: `attack_attempt_rate` (runs where the agent tried something unsafe that controls stopped) and unsafe
+  attempts during normal questions — shows whether an injection *fooled* the agent even when nothing bad happened.
