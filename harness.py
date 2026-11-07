@@ -86,6 +86,7 @@ NUM = re.compile(r"(?<![\d.])-?\d[\d,]*(?:\.\d+)?")   # "2026-01" -> 2026, 01
 
 def _nums(text: str) -> list[float]:
     text = re.sub(r"(?m)^\s*\d+[.)]\s", " ", text or "")       # drop "1. " list markers
+    text = re.sub(r"\b\d{4}-\d{2}(?:-\d{2})?\b", " ", text)     # ISO dates describe scope, not claims
     return [float(n.replace(",", "")) for n in NUM.findall(text) if n.strip("-,.")]
 
 
