@@ -33,3 +33,11 @@ In CI (`prompt-evolve` workflow) the winning prompt is opened as a PR to `prompt
 a human reviews the diff and report before merging.
 
 `data/hard_set.jsonl` adds business-logic traps (data grain, ratios, period comparisons, launch windows, ambiguity).
+
+## RAG few-shot retrieval
+
+`--rag tfidf|fastembed` retrieves the top-k verified question→SQL examples from `data/example_bank.jsonl`
+and appends them to the system prompt for each question. The bank is written to be distinct from the test set;
+the harness refuses to run if any test question is a near-duplicate of a bank example (cosine ≥ 0.85).
+`data/case_patterns.json` labels the analysis pattern each test case needs, so reports show **hit@k** and
+task completion split by retrieval hit/miss — separating retrieval failures from generation failures.

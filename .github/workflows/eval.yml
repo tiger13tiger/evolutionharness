@@ -15,6 +15,12 @@ on:
       suite:
         description: "basic | hard | all"
         default: "basic"
+      rag:
+        description: "Few-shot retrieval: off | tfidf | fastembed"
+        default: "off"
+      prompt:
+        description: "System prompt: live | base (original hand-written)"
+        default: "live"
       pace:
         description: "Seconds between calls (use 4+ on free tiers)"
         default: "4"
@@ -28,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
-      - run: pip install openai anthropic
+      - run: pip install openai anthropic ${{ inputs.rag == 'fastembed' && 'fastembed' || '' }}
       - name: Run eval (non-zero exit fails the run / PR)
         run: |
           MODEL="${{ inputs.model }}"
@@ -36,7 +42,9 @@ jobs:
                             ${MODEL:+--model "$MODEL"} \
                             --repeats "${{ inputs.repeats || '2' }}" \
                             --pace "${{ inputs.pace || '0' }}" \
-                            --suite "${{ inputs.suite || 'basic' }}"
+                            --suite "${{ inputs.suite || 'basic' }}" \
+                            --rag "${{ inputs.rag || 'off' }}" \
+                            ${{ inputs.prompt == 'base' && '--prompt-file base' || '' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

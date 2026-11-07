@@ -1,0 +1,9 @@
+{
+  "G01": ["count"], "G02": ["filter"], "G03": ["sum"], "G04": ["group_sort", "sum"], "G05": ["topk"],
+  "G06": ["group_sort", "sum"], "G07": ["month_range"], "G08": ["month_range"], "G09": ["ratio_of_sums"],
+  "G10": ["launch_filter"], "G11": ["topk"], "G12": ["out_of_scope"], "G13": ["out_of_scope"], "G14": ["out_of_scope"],
+  "H01": ["daily_grain", "month_range"], "H02": ["daily_grain"], "H03": ["top_per_group", "daily_grain"],
+  "H04": ["per_entity_avg"], "H05": ["share_pct"], "H06": ["ratio_of_sums", "filter"], "H07": ["period_growth"],
+  "H08": ["weekday", "daily_grain"], "H09": ["relative_window"], "H10": ["launch_window"], "H11": ["launch_window"],
+  "H12": ["ambiguous"]
+}

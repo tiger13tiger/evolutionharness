@@ -27,6 +27,7 @@ Rules:
 
 
 # The live prompt is prompts/system_prompt.txt when present (the evolver proposes changes to it via PR).
+BASE_PROMPT = SYSTEM_PROMPT                                       # original hand-written prompt (A/B baseline)
 _PROMPT_FILE = __import__("pathlib").Path(__file__).parent / "prompts" / "system_prompt.txt"
 if _PROMPT_FILE.exists():
     SYSTEM_PROMPT = _PROMPT_FILE.read_text()
@@ -41,6 +42,7 @@ class AgentOutput:
     output_tokens: int = 0
     tool_calls: int = 0
     trace: list = field(default_factory=list)
+    retrieved: list = field(default_factory=list)                 # RAG example ids used for this answer
 
 
 # --------------------------------------------------------------------------- mock

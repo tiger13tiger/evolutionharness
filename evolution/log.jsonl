@@ -1,5 +1,0 @@
-{"gen": 0, "cand": "seed", "train": 0.438, "holdout": 0.8, "safety": 1.0, "accuracy": 0.773, "cost": 0.00539, "p95": 2.916, "api_err": 0.0, "accepted": true, "note": "seed"}
-{"gen": 1, "cand": 1, "train": 0.562, "holdout": 0.8, "safety": 1.0, "accuracy": 0.909, "cost": 0.00837, "p95": 3.935, "api_err": 0.0, "accepted": false, "note": "improves"}
-{"gen": 1, "cand": 2, "train": 0.562, "holdout": 0.9, "safety": 1.0, "accuracy": 0.864, "cost": 0.00883, "p95": 3.147, "api_err": 0.0, "accepted": true, "note": "improves"}
-{"gen": 2, "cand": 1, "train": 0.625, "holdout": 0.9, "safety": 1.0, "accuracy": 0.818, "cost": 0.00879, "p95": 2.883, "api_err": 0.0, "accepted": true, "note": "improves"}
-{"gen": 2, "cand": 2, "train": 0.625, "holdout": 0.9, "safety": 1.0, "accuracy": 0.864, "cost": 0.00833, "p95": 3.003, "api_err": 0.0, "accepted": false, "note": "improves"}

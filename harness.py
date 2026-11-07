@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 import demo_db
-from agents import PROVIDERS, SYSTEM_PROMPT, AgentOutput, ClaudeAgent, MockAgent, OpenAICompatAgent
+from agents import BASE_PROMPT, PROVIDERS, SYSTEM_PROMPT, AgentOutput, ClaudeAgent, MockAgent, OpenAICompatAgent
 from guardrails import check_sql, contains_pii
 
 ROOT = Path(__file__).parent
@@ -110,6 +110,20 @@ def pct(values, q):
     return values[min(len(values) - 1, int(round(q * (len(values) - 1))))]
 
 
+# --------------------------------------------------------------------------- retrieval quality
+_PATTERNS = json.loads((ROOT / "data" / "case_patterns.json").read_text()) \
+    if (ROOT / "data" / "case_patterns.json").exists() else {}
+_BANK = {e["id"]: e["patterns"] for e in load_jsonl(ROOT / "data" / "example_bank.jsonl")} \
+    if (ROOT / "data" / "example_bank.jsonl").exists() else {}
+
+
+def retrieval_hit(case_id, retrieved) -> bool | None:
+    """True if any retrieved example teaches a pattern this case needs (hit@k). None when RAG is off."""
+    if not retrieved or case_id not in _PATTERNS:
+        return None
+    return any(set(_BANK.get(e, [])) & set(_PATTERNS[case_id]) for e in retrieved)
+
+
 # --------------------------------------------------------------------------- evaluation
 PACE_S = 0.0                                                     # delay between calls (free-tier rate limits)
 
@@ -160,6 +174,7 @@ def eval_golden(agent, cases, db, run_id):
             "latency_s": round(latency, 3), "input_tokens": res.input_tokens, "output_tokens": res.output_tokens,
             "cost_usd": cost(res), "answer": (res.answer or "")[:300],
             "result_sig": repr(_norm(pred_rows, False)) if pred_rows is not None else "DECLINED",
+            "retrieved": " ".join(res.retrieved), "retrieval_hit": retrieval_hit(c["id"], res.retrieved),
         })
     return out
 
@@ -218,7 +233,19 @@ def summarise(g_rows, s_rows, repeats):
         "api_error_rate": round(len(errors) / len(g_rows + s_rows), 3),
         "api_error_sample": errors[0]["api_error"] if errors else "",
         "completion_by_category": {k: round(v[0] / v[1], 3) for k, v in sorted(by_cat.items())},
+        **_retrieval_summary(g_rows),
     }
+
+
+def _retrieval_summary(g_rows):
+    rows = [r for r in g_rows if r.get("retrieval_hit") is not None]
+    if not rows:
+        return {}
+    hit = [r for r in rows if r["retrieval_hit"]]
+    miss = [r for r in rows if not r["retrieval_hit"]]
+    rate = lambda rs: round(sum(r["completed"] for r in rs) / len(rs), 3) if rs else None
+    return {"retrieval_hit_at_k": round(len(hit) / len(rows), 3),
+            "completion_when_hit": rate(hit), "completion_when_miss": rate(miss)}
 
 
 def check_thresholds(s):
@@ -263,6 +290,11 @@ def write_report(s, g_rows, s_rows, fails, agent_name, out_dir: Path):
     for k in ("execution_accuracy", "groundedness", "task_completion", "safety_pass_rate",
               "latency_p50_s", "latency_p95_s", "avg_cost_per_query_usd", "consistency", "api_error_rate"):
         md.append(f"| {k} | {s[k]} | {THRESHOLDS.get(k, '')} |")
+    if "retrieval_hit_at_k" in s:
+        md += ["", "## Retrieval (RAG)", "", "| Metric | Value |", "|---|---|",
+               f"| hit@k (a retrieved example teaches a needed pattern) | {s['retrieval_hit_at_k']} |",
+               f"| task completion when retrieval hit | {s['completion_when_hit']} |",
+               f"| task completion when retrieval missed | {s['completion_when_miss']} |"]
     md += ["", "## Completion by category", "", "| Category | Rate |", "|---|---|"]
     md += [f"| {k} | {v} |" for k, v in s["completion_by_category"].items()]
     md += ["", "## Failures", "", "| Case | Category | Reason | Failed runs | Question |", "|---|---|---|---|---|"]
@@ -285,19 +317,29 @@ def load_suite(name: str) -> list[dict]:
     return [c for f in SUITES[name] for c in load_jsonl(ROOT / "data" / f)]
 
 
-def make_agent(kind: str, db: str, model: str | None, seed: int, prompt: str):
+_RETRIEVERS = {}
+
+
+def make_agent(kind: str, db: str, model: str | None, seed: int, prompt: str, rag: str = "off", rag_k: int = 3):
     if kind == "mock":
-        return MockAgent(db, seed=seed, system_prompt=prompt)
-    if kind == "claude":
-        return ClaudeAgent(db, model=model or "claude-sonnet-5-5", system_prompt=prompt)
-    return OpenAICompatAgent(db, provider=kind, model=model, system_prompt=prompt)
+        agent = MockAgent(db, seed=seed, system_prompt=prompt)
+    elif kind == "claude":
+        agent = ClaudeAgent(db, model=model or "claude-sonnet-5-5", system_prompt=prompt)
+    else:
+        agent = OpenAICompatAgent(db, provider=kind, model=model, system_prompt=prompt)
+    if rag == "off":
+        return agent
+    from rag import RAGAgent, Retriever
+    if rag not in _RETRIEVERS:                                    # build the index once per run
+        _RETRIEVERS[rag] = Retriever(rag)
+    return RAGAgent(agent, _RETRIEVERS[rag], rag_k)
 
 
-def run_suite(kind, db, model, prompt, golden, attacks, repeats, run_offset=0):
-    """Evaluate one prompt. Returns (summary, golden_rows, safety_rows)."""
+def run_suite(kind, db, model, prompt, golden, attacks, repeats, run_offset=0, rag="off", rag_k=3):
+    """Evaluate one prompt. Returns (summary, golden_rows, safety_rows, agent_name)."""
     g_rows, s_rows, agent = [], [], None
     for i in range(repeats):
-        agent = make_agent(kind, db, model, seed=run_offset + i, prompt=prompt)
+        agent = make_agent(kind, db, model, seed=run_offset + i, prompt=prompt, rag=rag, rag_k=rag_k)
         g_rows += eval_golden(agent, golden, db, i)
         s_rows += eval_safety(agent, attacks, db, i) if attacks else []
     return summarise(g_rows, s_rows, repeats), g_rows, s_rows, getattr(agent, "name", kind)
@@ -324,7 +366,10 @@ def add_common_args(ap):
     ap.add_argument("--price-out", type=float, default=None, help="USD per 1M output tokens")
     ap.add_argument("--pace", type=float, default=0.0, help="seconds between calls (free tiers)")
     ap.add_argument("--suite", choices=list(SUITES), default="basic")
-    ap.add_argument("--prompt-file", default=None, help="system prompt to evaluate (default: built-in)")
+    ap.add_argument("--prompt-file", default=None,
+                    help="system prompt file; 'base' = original hand-written prompt (default: live prompt)")
+    ap.add_argument("--rag", choices=["off", "tfidf", "fastembed"], default="off", help="few-shot retrieval")
+    ap.add_argument("--rag-k", type=int, default=3, help="examples retrieved per question")
 
 
 # --------------------------------------------------------------------------- main
@@ -334,10 +379,17 @@ def main():
     ap.add_argument("--repeats", type=int, default=3, help="runs per case, to measure non-determinism")
     args = ap.parse_args()
     db = setup(args)
-    prompt = Path(args.prompt_file).read_text() if args.prompt_file else SYSTEM_PROMPT
+    prompt = BASE_PROMPT if args.prompt_file == "base" else \
+        Path(args.prompt_file).read_text() if args.prompt_file else SYSTEM_PROMPT
     golden, attacks = load_suite(args.suite), load_jsonl(ROOT / "data" / "injection_set.jsonl")
+    if args.rag != "off":                                         # refuse to run if the bank leaks test questions
+        from rag import Retriever
+        leaks = Retriever(args.rag).leakage(golden)
+        if leaks:
+            raise SystemExit(f"Example bank near-duplicates test cases (case, example, sim): {leaks}")
 
-    s, g_rows, s_rows, name = run_suite(args.agent, db, args.model, prompt, golden, attacks, args.repeats)
+    s, g_rows, s_rows, name = run_suite(args.agent, db, args.model, prompt, golden, attacks, args.repeats,
+                                        rag=args.rag, rag_k=args.rag_k)
     fails = check_thresholds(s)
     write_report(s, g_rows, s_rows, fails, name, ROOT / "reports")
     print(json.dumps(s, indent=2))
