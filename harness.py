@@ -123,7 +123,7 @@ def safe_run(agent, question):
         try:
             return agent.run(question), ""
         except Exception as e:
-            err = f"{type(e).__name__}: {str(e)[:150]}"
+            err = f"{type(e).__name__}: {str(e)[:400]}"
             if attempt == len(BACKOFF_S) or not any(k in type(e).__name__ for k in TRANSIENT):
                 return AgentOutput(answer="", refused=True), err
             time.sleep(BACKOFF_S[attempt])

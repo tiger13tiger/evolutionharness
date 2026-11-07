@@ -114,7 +114,7 @@ class LLMMutator:
                     text = self._call(msg)
                     break
                 except Exception as e:
-                    print(f"  mutator call failed ({attempt + 1}/4): {type(e).__name__}: {str(e)[:100]}")
+                    print(f"  mutator call failed ({attempt + 1}/4): {type(e).__name__}: {str(e)[:400]}")
                     text = ""
                     time.sleep((20, 40, 80, 0)[attempt])
             if not text:
@@ -214,6 +214,10 @@ def main():
     (PROMPTS / "gen_00.txt").write_text(parent)
     log.append({"gen": 0, "cand": "seed", **p_score, "accepted": True, "note": "seed"})
     print(f"gen 0 seed: {p_score}")
+    if p_score["api_err"] > 0.05:                                # scores are meaningless if calls are failing
+        sample = next((r["api_error"] for r in p_rows if r["api_error"]), "")
+        raise SystemExit(f"Seed run had {p_score['api_err']:.0%} API errors; stopping before spending more calls.\n"
+                         f"Example: {sample}\nLikely a daily quota. Wait for reset or use a paid key.")
 
     for gen in range(1, args.generations + 1):
         if p_score["train"] >= 1.0:
