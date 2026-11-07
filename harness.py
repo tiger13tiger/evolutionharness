@@ -55,12 +55,22 @@ def _norm(rows, ordered: bool):
     return rows if ordered else sorted(rows, key=repr)
 
 
+def has_top_level_order_by(sql: str) -> bool:
+    """ORDER BY outside any parentheses (window functions and subqueries don't make the result ordered)."""
+    depth, out = 0, []
+    for ch in sql:
+        depth += ch == "("
+        out.append(ch if depth == 0 else " ")
+        depth -= ch == ")"
+    return bool(re.search(r"\bORDER\s+BY\b", "".join(out), re.I))
+
+
 def results_match(pred, gold, gold_sql: str) -> bool:
     """Compare values only (aliases ignored). Extra columns in pred are OK if some projection matches gold.
     Row order matters only if gold SQL has ORDER BY."""
     if pred is None or gold is None or len(pred) != len(gold):
         return False
-    ordered = bool(re.search(r"\bORDER\s+BY\b", gold_sql, re.I))
+    ordered = has_top_level_order_by(gold_sql)
     if not gold:
         return True
     k, w = len(gold[0]), len(pred[0]) if pred else 0
@@ -94,7 +104,8 @@ def groundedness(answer: str, rows, question: str = "") -> float | None:
     """Share of numbers in the answer found in the result set (±0.01). Numbers echoed from the question
     (e.g. a year) are not claims. None if the answer has no numbers."""
     from_q = set(_nums(question))
-    nums = [n for n in _nums(answer) if n not in from_q]
+    n_rows = len(rows or [])                                     # 1..n are rank/row positions, not claims
+    nums = [n for n in _nums(answer) if n not in from_q and not (n.is_integer() and 1 <= n <= n_rows)]
     if not nums:
         return None
     pool = [float(c) for r in (rows or []) for c in r if isinstance(c, (int, float))]
@@ -172,7 +183,7 @@ def eval_golden(agent, cases, db, run_id):
             "guard": (guard.reason or "ok") if guard else "no_sql", "sql_error": err or "", "api_error": api_err,
             "exec_match": exec_ok, "groundedness": grounded, "completed": completed,
             "latency_s": round(latency, 3), "input_tokens": res.input_tokens, "output_tokens": res.output_tokens,
-            "cost_usd": cost(res), "answer": (res.answer or "")[:300],
+            "cost_usd": cost(res), "answer": (res.answer or "")[:2000],
             "result_sig": repr(_norm(pred_rows, False)) if pred_rows is not None else "DECLINED",
             "retrieved": " ".join(res.retrieved), "retrieval_hit": retrieval_hit(c["id"], res.retrieved),
         })

@@ -41,3 +41,21 @@ and appends them to the system prompt for each question. The bank is written to 
 the harness refuses to run if any test question is a near-duplicate of a bank example (cosine ≥ 0.85).
 `data/case_patterns.json` labels the analysis pattern each test case needs, so reports show **hit@k** and
 task completion split by retrieval hit/miss — separating retrieval failures from generation failures.
+
+## Results (DeepSeek `deepseek-chat`, 26 cases + 6 attacks, 3 runs each, Nov 2026)
+
+| Config | All | Holdout | Hard cases | Exec. accuracy | Safety | Input tokens / q |
+|---|---|---|---|---|---|---|
+| A. Original prompt | 69.2% | 80.0% | 50.0% | 81.8% | 100% | 1,009 |
+| B. Original prompt + RAG (bge-small) | 88.5% | 80.0% | 91.7% | 90.9% | 100% | 1,380 |
+| C. Evolved prompt | 87.2% | 90.0% | 83.3% | 84.8% | 100% | 2,451 |
+| **D. Evolved prompt + RAG (bge-small)** | **96.2%** | 90.0% | **100%** | **95.5%** | 100% | 2,702 |
+| E. Evolved prompt + RAG (TF-IDF) | 92.3% | 96.7% | 94.4% | 90.9% | 100% | 2,675 |
+
+- Prompt evolution and RAG fix *different* failures (evolution: data-grain rules, e.g. weekend vs weekday daily averages;
+  RAG: worked patterns, e.g. ratios within a filtered brand, period growth), so they stack.
+- RAG adds ~250–370 input tokens per question (+10%); prompt evolution added +143%.
+- Several apparent failures were evaluator bugs found by inspecting real runs (extra columns, echoed years, ISO dates,
+  rank numbers, window-function ORDER BY treated as result ordering). Each fix was checked against the mock agent's
+  planted bugs so the evaluator did not become lenient.
+- Known gap: G10 is ambiguous (combined vs per-game, all-time vs since launch) and should be rewritten.
