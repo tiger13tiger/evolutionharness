@@ -188,6 +188,8 @@ class OpenAICompatAgent:
         base_url, key_env, default_model = PROVIDERS[provider]
         self.candidates = [model] if model else (default_model if isinstance(default_model, list) else [default_model])
         model = self.candidates[0]
+        if not os.environ.get(key_env):                           # secret missing or empty in CI
+            raise SystemExit(f"{key_env} is not set. Add it under Settings -> Secrets and variables -> Actions.")
         self.client = OpenAI(base_url=base_url, api_key=os.environ[key_env], max_retries=2, timeout=45)  # fail fast
         self.db_path, self.model, self.max_turns = db_path, model, max_turns
         self.name = f"{provider}:{model}"
