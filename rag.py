@@ -25,6 +25,7 @@ def _tokens(text: str) -> list[str]:
 # --------------------------------------------------------------------------- embedders
 class TfidfEmbedder:
     name = "tfidf"
+    leak_threshold = 0.85
 
     def fit(self, docs: list[str]):
         df = Counter(t for d in docs for t in set(_tokens(d)))
@@ -49,6 +50,7 @@ class TfidfEmbedder:
 
 class FastEmbedEmbedder:
     name = "fastembed:bge-small-en-v1.5"
+    leak_threshold = 0.93                                            # dense cosines run high; related != duplicate
 
     def __init__(self):
         from fastembed import TextEmbedding
@@ -80,14 +82,13 @@ class Retriever:
                         key=lambda x: -x[1])
         return scored[:k]
 
-    def leakage(self, cases: list[dict], threshold: float = 0.85) -> list[tuple[str, str, float]]:
+    def leakage(self, cases: list[dict], threshold: float | None = None) -> list[tuple[str, str, float]]:
         """Test questions that are near-duplicates of bank examples (would inflate RAG results)."""
-        hits = []
-        for c in cases:
-            e, s = self.search(c["question"], 1)[0]
-            if s >= threshold:
-                hits.append((c["id"], e["id"], round(s, 3)))
-        return hits
+        threshold = threshold or self.emb.leak_threshold
+        top = sorted(((c["id"], *self.search(c["question"], 1)[0]) for c in cases), key=lambda x: -x[2])
+        print(f"Leakage check ({self.name}, threshold {threshold}); closest pairs: "
+              + ", ".join(f"{cid}~{e['id']}={s:.3f}" for cid, e, s in top[:5]))
+        return [(cid, e["id"], round(s, 3)) for cid, e, s in top if s >= threshold]
 
 
 def format_examples(hits) -> str:
